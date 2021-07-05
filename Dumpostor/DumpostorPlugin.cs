@@ -2,12 +2,12 @@
 using System.Collections;
 using System.Collections.Generic;
 using System.IO;
-using System.Linq;
 using BepInEx;
 using BepInEx.Configuration;
 using BepInEx.IL2CPP;
 using Dumpostor.Dumpers;
 using HarmonyLib;
+using InnerNet;
 using Reactor;
 using UnityEngine;
 using UnityEngine.AddressableAssets;
@@ -35,7 +35,10 @@ namespace Dumpostor
             {
                 Log.LogError("DumpedPath is empty or is not a directory");
                 Application.Quit();
+                return;
             }
+
+            Log.LogDebug("Dumping to " + DumpedPath.Value);
 
             EntrypointPatch.Initialized += () =>
             {
@@ -44,23 +47,35 @@ namespace Dumpostor
                     new EnumDumper<StringNames>(),
                     new EnumDumper<SystemTypes>(),
                     new EnumDumper<TaskTypes>(),
-
-                    new TaskDumper()
+                    new EnumDumper<GameKeywords>(),
+                    new HatDumper(),
+                    new SkinDumper(),
+                    new PetDumper(),
+                    new ColorDumper(),
+                    new TranslationsDumper()
                 };
 
                 foreach (var dumper in dumpers)
                 {
+                    Log.LogInfo("Dumping " + dumper);
+
                     var dump = dumper.Dump();
                     if (dump != null)
                     {
-                        File.WriteAllText(Path.Combine(DumpedPath.Value, dumper.FileName + ".json"), dump);
+                        File.WriteAllText(Path.Combine(DumpedPath.Value, dumper.FileName), dump);
                     }
                 }
+
+                var mapDumpers = new IMapDumper[]
+                {
+                    new TaskDumper(),
+                    new VentDumper()
+                };
 
                 foreach (var mapType in (MapTypes[]) Enum.GetValues(typeof(MapTypes)))
                 {
                     var shipPrefab = AmongUsClient.Instance.ShipPrefabs[(int) mapType];
-                    Coroutines.Start(DumpCoroutine(mapType, shipPrefab, dumpers.OfType<IMapDumper>()));
+                    Coroutines.Start(DumpCoroutine(mapType, shipPrefab, mapDumpers));
                 }
             };
         }
@@ -79,9 +94,12 @@ namespace Dumpostor
             var directory = Path.Combine(DumpedPath.Value, mapType.ToString());
             Directory.CreateDirectory(directory);
 
+            Log.LogInfo("Dumping map " + mapType);
+
             foreach (var dumper in dumpers)
             {
-                File.WriteAllText(Path.Combine(directory, dumper.FileName + ".json"), dumper.Dump(mapType, shipStatus));
+                Log.LogInfo("Dumping " + dumper);
+                File.WriteAllText(Path.Combine(directory, dumper.FileName), dumper.Dump(mapType, shipStatus));
             }
 
             assetReference.ReleaseInstance(shipPrefab.Result);

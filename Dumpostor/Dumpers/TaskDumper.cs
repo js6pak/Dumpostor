@@ -1,23 +1,21 @@
-using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text.Json;
-using System.Text.Json.Serialization;
 using UnityEngine;
 
 namespace Dumpostor.Dumpers
 {
     public class TaskDumper : IMapDumper
     {
-        public string FileName => "tasks";
+        public string FileName => "tasks.json";
 
         public string Dump(MapTypes mapType, ShipStatus shipStatus)
         {
             var consoles = shipStatus.GetComponentsInChildren<Console>();
 
-            var tasks = new Dictionary<int, object>();
+            var tasks = new Dictionary<int, TaskInfo>();
 
-            foreach (var taskType in EnumExtensions.GetValues<TaskTypes>())
+            foreach (var taskType in Extensions.GetValues<TaskTypes>())
             {
                 var taskConsoles = new List<TaskConsole>();
 
@@ -97,22 +95,6 @@ namespace Dumpostor.Dumpers
                 Room = room;
                 Position = position;
                 UsableDistance = usableDistance;
-            }
-        }
-
-        public class Vector2Converter : JsonConverter<Vector2>
-        {
-            public override Vector2 Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
-            {
-                throw new NotSupportedException();
-            }
-
-            public override void Write(Utf8JsonWriter writer, Vector2 value, JsonSerializerOptions options)
-            {
-                writer.WriteStartObject();
-                writer.WriteNumber("x", value.x);
-                writer.WriteNumber("y", value.y);
-                writer.WriteEndObject();
             }
         }
     }

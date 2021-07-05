@@ -1,12 +1,8 @@
 namespace Dumpostor.Dumpers
 {
-    // TODO make this totally independent from IDumper?
-    public interface IMapDumper : IDumper
+    public interface IMapDumper
     {
-        string IDumper.Dump()
-        {
-            return null;
-        }
+        string FileName { get; }
 
         string Dump(MapTypes mapType, ShipStatus shipStatus);
     }
