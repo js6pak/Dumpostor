@@ -1,44 +1,59 @@
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text.Json;
+using Il2CppSystem.Text;
+using Reactor.Extensions;
 using UnityEngine;
 
 namespace Dumpostor.Dumpers
 {
     public class TaskDumper : IMapDumper
     {
+        public enum TaskLength
+        {
+            Common,
+            Long,
+            Short
+        }
+
         public string FileName => "tasks.json";
 
         public string Dump(MapTypes mapType, ShipStatus shipStatus)
         {
-            var consoles = shipStatus.GetComponentsInChildren<Console>();
-
             var tasks = new Dictionary<int, TaskInfo>();
 
-            foreach (var taskType in Extensions.GetValues<TaskTypes>())
+            void Handle(NormalPlayerTask task, TaskLength length)
             {
+                task.Arrow.DestroyImmediate();
+                task.Initialize();
+
                 var taskConsoles = new List<TaskConsole>();
 
-                foreach (var console in consoles.Where(x => x.TaskTypes.Contains(taskType)))
+                foreach (var console in shipStatus.AllConsoles.Where(console => console.TaskTypes.Contains(task.TaskType)))
                 {
-                    taskConsoles.Add(new TaskConsole(taskType, console.Room, console.transform.position, console.UsableDistance));
+                    taskConsoles.Add(new TaskConsole(console.ConsoleId, console.Room, console.transform.position, console.UsableDistance));
                 }
 
-                if (!taskConsoles.Any())
-                {
-                    continue; // current map doesn't have this task at all
-                }
-
-                var taskLength = GetTaskLength(shipStatus, taskType);
-                if (taskLength == null)
-                {
-                    continue;
-                }
-
-                tasks.Add((int) taskType, new TaskInfo(taskType, taskLength, taskConsoles));
+                tasks.Add(task.Index, new TaskInfo(task, length, taskConsoles));
             }
 
-            return JsonSerializer.Serialize(tasks, new JsonSerializerOptions
+            foreach (var task in shipStatus.CommonTasks)
+            {
+                Handle(task, TaskLength.Common);
+            }
+
+            foreach (var task in shipStatus.NormalTasks)
+            {
+                Handle(task, TaskLength.Short);
+            }
+
+            foreach (var task in shipStatus.LongTasks)
+            {
+                Handle(task, TaskLength.Long);
+            }
+
+            return JsonSerializer.Serialize(tasks.OrderBy(x => x.Key).ToDictionary(x => x.Key, x => x.Value), new JsonSerializerOptions
             {
                 PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
                 Converters =
@@ -48,50 +63,37 @@ namespace Dumpostor.Dumpers
             });
         }
 
-        private string GetTaskLength(ShipStatus shipStatus, TaskTypes taskType)
-        {
-            if (shipStatus.CommonTasks.Any(commonTask => commonTask.TaskType == taskType))
-            {
-                return "common";
-            }
-
-            if (shipStatus.LongTasks.Any(longTask => longTask.TaskType == taskType))
-            {
-                return "long";
-            }
-
-            if (shipStatus.NormalTasks.Any(shortTask => shortTask.TaskType == taskType))
-            {
-                return "short";
-            }
-
-            return null;
-        }
-
         public class TaskInfo
         {
+            public string Type { get; }
+            public TaskTypes TaskType { get; }
             public string HudText { get; }
-            public string Length { get; } // TODO length enum?
+            public TaskLength Length { get; }
             public List<TaskConsole> Consoles { get; }
 
-            public TaskInfo(TaskTypes taskType, string length, List<TaskConsole> consoles)
+            public TaskInfo(NormalPlayerTask task, TaskLength length, List<TaskConsole> consoles)
             {
-                HudText = TranslationController.Instance.GetString(taskType);
+                Type = task.GetIl2CppType().Name;
+                TaskType = task.TaskType;
                 Length = length;
                 Consoles = consoles;
+
+                var stringBuilder = new StringBuilder();
+                task.AppendTaskText(stringBuilder);
+                HudText = stringBuilder.ToString().Replace("<color=#00DD00FF>", "").Replace("<color=#FFFF00FF>", "").Replace("</color>", "").TrimEnd(Environment.NewLine.ToCharArray());
             }
         }
 
         public class TaskConsole
         {
-            public string HudText { get; }
+            public int Id { get; }
             public SystemTypes Room { get; }
             public Vector2 Position { get; }
             public float UsableDistance { get; }
 
-            public TaskConsole(TaskTypes taskType, SystemTypes room, Vector2 position, float usableDistance)
+            public TaskConsole(int id, SystemTypes room, Vector2 position, float usableDistance)
             {
-                HudText = $"{TranslationController.Instance.GetString(room)}: {TranslationController.Instance.GetString(taskType)}";
+                Id = id;
                 Room = room;
                 Position = position;
                 UsableDistance = usableDistance;
